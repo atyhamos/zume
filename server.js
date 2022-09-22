@@ -2,37 +2,38 @@ const express = require("express")
 const path = require("path")
 const PORT = 3000
 const app = express()
-const server = app.listen(PORT, () => {
-  console.log(`Listening on Port ${PORT}`)
+const server = require("http").Server(app)
+const { v4: uuidV4 } = require("uuid")
+
+app.set("view engine", "ejs")
+app.use(express.static(path.join(__dirname, ""))) // use root folder as static directory
+
+app.get("/", (req, res) => {
+  res.render("home")
 })
+
+app.get("/new", (req, res) => {
+  res.redirect(`/${uuidV4()}`)
+})
+
+app.get("/:room", (req, res) => {
+  res.render("room", { roomId: req.params.room })
+})
+
+server.listen(PORT)
 
 const io = require("socket.io")(server, {
   allowEIO3: true,
 })
-app.use(express.static(path.join(__dirname, ""))) // use root folder as static directory
-
-const connections = []
 
 io.on("connection", socket => {
-  console.log(`socket id is ${socket.id}`)
-  socket.on("userconnect", data => {
-    console.log(data)
-    const otherUsers = connections.filter(
-      connection => connection.connectionId != socket.id
-    )
+  socket.on("join-room", (roomId, userId) => {
+    // inform who joined the room
+    socket.join(roomId)
+    socket.to(roomId).emit("user-connected", userId)
 
-    // add current user
-    connections.push({
-      connectionId: socket.id,
-      userId: data.displayName,
-      meetingId: data.meetingId,
-    })
-
-    otherUsers.forEach(v => {
-      socket.to(v.connectionId).emit("inform_others_about_me", {
-        connectionId: socket.id,
-        userId: data.displayName,
-      })
+    socket.on("disconnect", () => {
+      socket.to(roomId).emit("user-disconnected", userId) // inform who left the room
     })
   })
 })

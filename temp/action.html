@@ -73,10 +73,7 @@
       $(function () {
         // new meeting
         $(document).on("click", "#btn-new-meeting", function () {
-          const meetingCode = Math.floor(Math.random() * 100000000)
-          const meetingUrl =
-            window.location.origin + `?meetingID=${meetingCode}`
-          window.location.replace(meetingUrl)
+          window.location.replace(window.location.origin + "new")
         })
         // join meeting
         $(document).on("click", "#btn-join-meeting", function () {

@@ -1,4 +1,6 @@
-const AppProcess = () => {
+const AppProcess = (() => {
+  const _init = (SDP, connectionId) => {}
+
   const iceConfiguration = {
     iceServers: [
       {
@@ -12,20 +14,43 @@ const AppProcess = () => {
 
   const setConnection = connectionId => {
     const connection = new RTCPeerConnection(iceConfiguration)
+    connection.onnegotiationneeded = async event => {
+      await setOffer(connectionId)
+    }
+    connection.onicecandidate = event => {
+      if (event.candidate) {
+        serverProcess(
+          JSON.stringify({ icecandidate: event.candidate }),
+          connectionId
+        )
+      }
+    }
   }
 
   return {
     setNewConnection: async function (connectionId) {
       await setConnection(connectionId)
     },
+    init: async (SDP, connectionId) => {
+      await _init(SDP, connectionId)
+    },
   }
-}
+})()
 
 const app = (() => {
-  const init = (uid, mid) => {
+  const _init = (uid, mid) => {
     const socket = io.connect()
+
+    const SDP = (data, to) => {
+      socket.emit("SDPProcess", {
+        message: data,
+        to,
+      })
+    }
+
     socket.on("connect", () => {
       if (socket.connected) {
+        AppProcess.init(SDP, socket.id)
         if (uid && mid) {
           socket.emit("userconnect", {
             displayName: uid,
@@ -52,6 +77,6 @@ const app = (() => {
   }
 
   return {
-    _init: (uid, mid) => init(uid, mid),
+    init: (uid, mid) => _init(uid, mid),
   }
 })()
