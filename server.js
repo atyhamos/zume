@@ -20,13 +20,12 @@ app.get("/:room", (req, res) => {
   res.render("room", { roomId: req.params.room })
 })
 
-server.listen(PORT)
-
 const io = require("socket.io")(server, {
   allowEIO3: true,
 })
 
 io.on("connection", socket => {
+  console.log("connection made")
   socket.on("join-room", (roomId, userId) => {
     // inform who joined the room
     socket.join(roomId)
@@ -37,3 +36,5 @@ io.on("connection", socket => {
     })
   })
 })
+
+server.listen(PORT)

@@ -6,10 +6,10 @@ const myPeer = new Peer(undefined, {
   port: "3001",
 })
 
-const myVideo = document.createElement("video")
-myVideo.muted = true // mute video to ourselves, not to others
+const myVideoDiv = document.createElement("div")
 
 const peers = {} // to manage disconnections
+const idToName = {}
 
 navigator.mediaDevices
   .getUserMedia({
@@ -17,48 +17,90 @@ navigator.mediaDevices
     audio: true,
   })
   .then(stream => {
-    addVideoStream(myVideo, stream)
+    addVideoStream(myVideoDiv, stream, displayName)
+    myPeer.on("connection", con => {
+      console.log("I established connection with ", con.peer)
+      // Send messages
+      con.on("open", () => {
+        con.send({ hello: true, displayName }) // for people who just joined to advertise their displayName
 
-    myPeer.on("call", call => {
+        // Receive messages
+        con.on("data", data => {
+          if (data.hello) {
+            idToName[con.peer] = data.displayName
+          }
+          console.log(`I received `, data)
+        })
+      })
+      con.on("error", err => console.log(err))
+
       // set peer to listen to call
-      call.answer(stream)
-      const receivedVideo = document.createElement("video")
+      myPeer.on("call", call => {
+        peers[call.peer] = call // for people who just joined to know their peers
 
-      call.on("stream", receivedVideoStream => {
-        // set call to receive video stream
-        addVideoStream(receivedVideo, receivedVideoStream)
+        call.answer(stream)
+        const receivedVideoDiv = document.createElement("div")
+
+        call.on("stream", receivedVideoStream => {
+          // set call to receive video
+          console.log(idToName[call.peer])
+          addVideoStream(
+            receivedVideoDiv,
+            receivedVideoStream,
+            idToName[call.peer]
+          )
+        })
       })
     })
 
     // defined in server.js
-    socket.on("user-connected", userId => connectToNewUser(userId, stream))
+    socket.on("user-connected", userId => {
+      connectToNewUser(userId, stream)
+    })
   })
 
 // defined in server.js
 socket.on("user-disconnected", userId => {
+  console.log(`${userId} disconnected`)
   if (peers[userId]) peers[userId].close()
 })
 
 myPeer.on("open", id => {
+  console.log("joining room....")
   socket.emit("join-room", ROOM_ID, id)
 })
 
 const connectToNewUser = (userId, stream) => {
-  const call = myPeer.call(userId, stream) // Calling user with userId and sending own stream
-  const peerVideo = document.createElement("video")
+  const con = myPeer.connect(userId)
+  con.on("open", () => {
+    console.log("I established connection with ", con.peer)
+    con.send({ hello: true, displayName }) // advertise self to new users
+    con.on("data", data => {
+      if (data.hello) {
+        idToName[con.peer] = data.displayName
+      }
+      console.log("I received: ", data)
+    })
 
-  call.on("stream", peerVideoStream => {
-    // listen for peer's stream and add it to our view
-    addVideoStream(peerVideo, peerVideoStream)
+    console.log("Calling new user, ", userId)
+    const call = myPeer.call(userId, stream) // Calling user with userId and sending own stream
+    const peerVideoDiv = document.createElement("div")
+
+    call.on("stream", peerVideoStream => {
+      // listen for peer's stream and add it to our view
+      addVideoStream(peerVideoDiv, peerVideoStream, idToName[userId])
+    })
+    call.on("close", () => {
+      // listen for when peer disconnects
+      peerVideoDiv.remove()
+    })
+    peers[userId] = call
   })
-  call.on("close", () => {
-    // listen for when peer disconnects
-    peerVideo.remove()
-  })
-  peers[userId] = call
 }
 
-const addVideoStream = (video, stream) => {
+const addVideoStream = (videoDiv, stream, name) => {
+  console.log("adding video!")
+  const video = document.createElement("video")
   video.srcObject = stream
   video.autoplay = true
   video.muted = true // muted to ownself, not to others
@@ -66,5 +108,7 @@ const addVideoStream = (video, stream) => {
   video.addEventListener("loadedmetadeta", () => {
     video.play() // play video when loaded
   })
-  videoGrid.append(video)
+  videoDiv.innerHTML = `<h2 class='text-center'>${name}</h2>`
+  videoDiv.append(video)
+  videoGrid.append(videoDiv)
 }
